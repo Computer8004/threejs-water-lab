@@ -13,26 +13,30 @@
   <body>
     <div id="app">
       <canvas id="scene"></canvas>
+      <div id="underwater-overlay" aria-hidden="true">
+        <div class="underwater-vignette"></div>
+        <div class="underwater-waterline"></div>
+      </div>
 
       <div class="hud top-left glass">
         <p class="eyebrow">Clean-room prototype</p>
         <h1>Water Lab</h1>
         <p class="lede">
-          An original static-site ocean sandbox built for testing the interaction style of premium water demos.
+          Public-source ocean sandbox, now with a broader Water Pro-style control surface and improved underwater mode.
         </p>
         <div class="pill-row">
           <span class="pill">Original implementation</span>
-          <span class="pill">Static deploy</span>
-          <span class="pill">Three.js</span>
+          <span class="pill">Official Three.js water stack</span>
+          <span class="pill">More controls</span>
         </div>
       </div>
 
       <div class="hud top-right glass controls-card">
         <div class="button-grid">
-          <button data-preset="Tropical">Tropical</button>
-          <button data-preset="Storm">Storm</button>
-          <button data-preset="Sunset">Sunset</button>
-          <button data-preset="Moonlight">Moonlight</button>
+          <button data-preset="tropical">Tropical</button>
+          <button data-preset="storm">Storm</button>
+          <button data-preset="sunset">Sunset</button>
+          <button data-preset="moonlit">Moonlit</button>
         </div>
         <div class="toggle-row">
           <button id="underwater-toggle">Toggle underwater</button>
@@ -41,20 +45,19 @@
       </div>
 
       <div class="hud bottom-left glass note-card">
-        <h2>Included in this MVP</h2>
+        <h2>Control groups</h2>
         <ul>
-          <li>Animated ocean surface with crest foam</li>
-          <li>Preset-driven sky, lighting, and water mood</li>
-          <li>Floating buoy with bob/pitch/roll sampling</li>
-          <li>Seabed glow + faux caustics</li>
-          <li>Underwater mode and orbit camera</li>
+          <li>General / Waves / Appearance</li>
+          <li>Foam / Underwater / Ocean Floor</li>
+          <li>Sky / Buoyancy / Debug</li>
+          <li>10 environment presets</li>
         </ul>
       </div>
 
       <div class="hud bottom-right glass footer-card">
         <strong>Note</strong>
         <p>
-          This is not a copy of Three.js Water Pro. It is a fresh public prototype intended for Paperclip testing and iteration.
+          This is still a clean-room prototype. The new controls mirror the public-facing Water Pro categories as closely as possible using public Three.js pieces.
         </p>
       </div>
     </div>
