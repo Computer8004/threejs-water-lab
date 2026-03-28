@@ -440,6 +440,7 @@ function applyPreset(name) {
 }
 
 function syncGui() {
+  if (!Array.isArray(controllers) || controllers.length === 0) return
   controllers.forEach((c) => c.updateDisplay())
 }
 
