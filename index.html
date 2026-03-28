@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Water Lab — Ocean Demo</title>
+    <meta
+      name="description"
+      content="Original Three.js ocean playground inspired by modern WebGPU water demos."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌊%3C/text%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+
+      <div class="hud top-left glass">
+        <p class="eyebrow">Clean-room prototype</p>
+        <h1>Water Lab</h1>
+        <p class="lede">
+          An original static-site ocean sandbox built for testing the interaction style of premium water demos.
+        </p>
+        <div class="pill-row">
+          <span class="pill">Original implementation</span>
+          <span class="pill">Static deploy</span>
+          <span class="pill">Three.js</span>
+        </div>
+      </div>
+
+      <div class="hud top-right glass controls-card">
+        <div class="button-grid">
+          <button data-preset="Tropical">Tropical</button>
+          <button data-preset="Storm">Storm</button>
+          <button data-preset="Sunset">Sunset</button>
+          <button data-preset="Moonlight">Moonlight</button>
+        </div>
+        <div class="toggle-row">
+          <button id="underwater-toggle">Toggle underwater</button>
+          <button id="camera-toggle">Center buoy</button>
+        </div>
+      </div>
+
+      <div class="hud bottom-left glass note-card">
+        <h2>Included in this MVP</h2>
+        <ul>
+          <li>Animated ocean surface with crest foam</li>
+          <li>Preset-driven sky, lighting, and water mood</li>
+          <li>Floating buoy with bob/pitch/roll sampling</li>
+          <li>Seabed glow + faux caustics</li>
+          <li>Underwater mode and orbit camera</li>
+        </ul>
+      </div>
+
+      <div class="hud bottom-right glass footer-card">
+        <strong>Note</strong>
+        <p>
+          This is not a copy of Three.js Water Pro. It is a fresh public prototype intended for Paperclip testing and iteration.
+        </p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
