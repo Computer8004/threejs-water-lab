@@ -2,6 +2,8 @@ import './styles.css'
 import * as THREE from 'three'
 import GUI from 'lil-gui'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { Water } from 'three/examples/jsm/objects/Water.js'
+import { Sky } from 'three/examples/jsm/objects/Sky.js'
 
 const canvas = document.querySelector('#scene')
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -9,519 +11,386 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.outputColorSpace = THREE.SRGBColorSpace
 renderer.toneMapping = THREE.ACESFilmicToneMapping
-renderer.toneMappingExposure = 1.05
+renderer.toneMappingExposure = 0.85
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
 const scene = new THREE.Scene()
-scene.fog = new THREE.FogExp2('#8bc8ff', 0.0025)
+scene.fog = new THREE.FogExp2(0x111826, 0.00042)
 
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500)
-camera.position.set(18, 7.5, 18)
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 20000)
+camera.position.set(30, 18, 44)
 
 const controls = new OrbitControls(camera, canvas)
 controls.enableDamping = true
-controls.target.set(0, 1.8, 0)
-controls.maxPolarAngle = Math.PI * 0.49
-controls.minDistance = 4
-controls.maxDistance = 65
+controls.target.set(0, 4, 0)
+controls.minDistance = 8
+controls.maxDistance = 220
+controls.maxPolarAngle = Math.PI * 0.495
 
-const ambientLight = new THREE.HemisphereLight('#9cd6ff', '#0b1320', 0.8)
-scene.add(ambientLight)
+const ambient = new THREE.HemisphereLight(0x9bb8ff, 0x05070b, 0.3)
+scene.add(ambient)
 
-const sunLight = new THREE.DirectionalLight('#fff5d1', 1.6)
-sunLight.castShadow = true
-sunLight.shadow.mapSize.set(2048, 2048)
-sunLight.shadow.camera.near = 1
-sunLight.shadow.camera.far = 90
-sunLight.shadow.camera.left = -40
-sunLight.shadow.camera.right = 40
-sunLight.shadow.camera.top = 40
-sunLight.shadow.camera.bottom = -40
-scene.add(sunLight)
-scene.add(sunLight.target)
+const moonLight = new THREE.DirectionalLight(0xffffff, 1.4)
+moonLight.castShadow = true
+moonLight.shadow.mapSize.set(2048, 2048)
+moonLight.shadow.camera.near = 1
+moonLight.shadow.camera.far = 400
+moonLight.shadow.camera.left = -150
+moonLight.shadow.camera.right = 150
+moonLight.shadow.camera.top = 150
+moonLight.shadow.camera.bottom = -150
+scene.add(moonLight)
+scene.add(moonLight.target)
 
-const sunSphere = new THREE.Mesh(
-  new THREE.SphereGeometry(1.8, 32, 32),
-  new THREE.MeshBasicMaterial({ color: '#ffdba0', transparent: true, opacity: 0.95 })
+const sky = new Sky()
+sky.scale.setScalar(10000)
+scene.add(sky)
+
+const sun = new THREE.Vector3()
+const pmrem = new THREE.PMREMGenerator(renderer)
+let skyEnvTarget = null
+
+const waterNormals = new THREE.TextureLoader().load(
+  'https://threejs.org/examples/textures/waternormals.jpg',
+  (texture) => {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  }
 )
-scene.add(sunSphere)
+waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping
 
-const skyGeometry = new THREE.SphereGeometry(240, 48, 24)
-const skyMaterial = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  uniforms: {
-    topColor: { value: new THREE.Color('#72bfff') },
-    horizonColor: { value: new THREE.Color('#d7efff') },
-    bottomColor: { value: new THREE.Color('#03111f') },
-    offset: { value: 18 },
-    exponent: { value: 0.8 },
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 topColor;
-    uniform vec3 horizonColor;
-    uniform vec3 bottomColor;
-    uniform float offset;
-    uniform float exponent;
-    varying vec3 vWorldPosition;
-
-    void main() {
-      float h = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
-      float horizonMix = clamp(pow(max(h, 0.0), exponent), 0.0, 1.0);
-      vec3 color = mix(horizonColor, topColor, horizonMix);
-      color = mix(bottomColor, color, smoothstep(-0.4, 0.18, h));
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
+const waterGeometry = new THREE.PlaneGeometry(12000, 12000)
+const water = new Water(waterGeometry, {
+  textureWidth: 1024,
+  textureHeight: 1024,
+  waterNormals,
+  sunDirection: new THREE.Vector3(),
+  sunColor: 0xffffff,
+  waterColor: 0x0b1f33,
+  distortionScale: 3.7,
+  fog: true,
 })
-scene.add(new THREE.Mesh(skyGeometry, skyMaterial))
-
-const floorMaterial = new THREE.ShaderMaterial({
-  uniforms: {
-    uTime: { value: 0 },
-    uColorA: { value: new THREE.Color('#113b49') },
-    uColorB: { value: new THREE.Color('#0f1824') },
-    uCausticColor: { value: new THREE.Color('#96fff2') },
-    uDepthFade: { value: 24 },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    varying vec3 vWorldPos;
-    void main() {
-      vUv = uv;
-      vec4 worldPos = modelMatrix * vec4(position, 1.0);
-      vWorldPos = worldPos.xyz;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform float uTime;
-    uniform vec3 uColorA;
-    uniform vec3 uColorB;
-    uniform vec3 uCausticColor;
-    uniform float uDepthFade;
-    varying vec2 vUv;
-    varying vec3 vWorldPos;
-
-    float caustic(vec2 p) {
-      float waveA = sin(p.x * 12.0 + uTime * 1.6);
-      float waveB = sin((p.y * 11.0 - uTime * 1.2) + waveA * 0.8);
-      float waveC = sin((p.x + p.y) * 14.0 + uTime * 1.8);
-      return smoothstep(1.4, 2.2, waveA + waveB + waveC + 1.2);
-    }
-
-    void main() {
-      vec2 uv = vUv * 2.2;
-      float c = caustic(uv + vec2(vWorldPos.x, vWorldPos.z) * 0.03);
-      float depthMix = clamp((-vWorldPos.y) / uDepthFade, 0.0, 1.0);
-      vec3 base = mix(uColorA, uColorB, depthMix);
-      base += uCausticColor * c * (1.0 - depthMix) * 0.5;
-      gl_FragColor = vec4(base, 1.0);
-    }
-  `,
-})
-
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(220, 220, 1, 1), floorMaterial)
-floor.rotation.x = -Math.PI / 2
-floor.position.y = -10
-scene.add(floor)
-
-const waterUniforms = {
-  uTime: { value: 0 },
-  uDeepColor: { value: new THREE.Color('#0d4a73') },
-  uShallowColor: { value: new THREE.Color('#40d0d8') },
-  uFoamColor: { value: new THREE.Color('#dffcff') },
-  uSkyReflection: { value: new THREE.Color('#d7efff') },
-  uSunDir: { value: new THREE.Vector3(0.6, 0.75, 0.3).normalize() },
-  uSunColor: { value: new THREE.Color('#fff3be') },
-  uWaveAmp: { value: 1.35 },
-  uWaveScale: { value: 0.16 },
-  uWaveSpeed: { value: 0.55 },
-  uFoamAmount: { value: 0.68 },
-  uChoppiness: { value: 0.72 },
-  uDepthColorStrength: { value: 0.8 },
-  uUnderwater: { value: 0 },
-}
-
-const waterMaterial = new THREE.ShaderMaterial({
-  transparent: false,
-  uniforms: waterUniforms,
-  side: THREE.DoubleSide,
-  vertexShader: `
-    uniform float uTime;
-    uniform float uWaveAmp;
-    uniform float uWaveScale;
-    uniform float uWaveSpeed;
-    uniform float uChoppiness;
-
-    varying vec3 vWorldPos;
-    varying vec3 vNormalW;
-    varying float vHeight;
-    varying vec2 vUv;
-
-    vec2 waveDir(float angle) {
-      return vec2(cos(angle), sin(angle));
-    }
-
-    float waveHeight(vec2 p) {
-      float t = uTime * uWaveSpeed;
-      float h = 0.0;
-      h += sin(dot(p, waveDir(0.2)) * 1.2 + t * 1.8) * 0.55;
-      h += sin(dot(p, waveDir(1.1)) * 1.9 - t * 1.4) * 0.35;
-      h += sin(dot(p, waveDir(2.4)) * 2.8 + t * 1.2) * 0.2;
-      h += sin(dot(p, waveDir(0.8)) * 5.2 + t * 2.6) * 0.08;
-      return h;
-    }
-
-    void main() {
-      vUv = uv;
-      vec3 pos = position;
-      vec2 p = pos.xz * uWaveScale;
-      float height = waveHeight(p) * uWaveAmp;
-      pos.y += height;
-      pos.x += sin(p.y * 3.0 + uTime * 1.2) * uChoppiness * 0.12;
-      pos.z += cos(p.x * 2.6 + uTime * 1.1) * uChoppiness * 0.12;
-
-      float eps = 0.08;
-      float hx = waveHeight((pos.xz + vec2(eps, 0.0)) * uWaveScale) * uWaveAmp;
-      float hz = waveHeight((pos.xz + vec2(0.0, eps)) * uWaveScale) * uWaveAmp;
-      vec3 tangent = normalize(vec3(eps, hx - height, 0.0));
-      vec3 bitangent = normalize(vec3(0.0, hz - height, eps));
-      vec3 normal = normalize(cross(bitangent, tangent));
-
-      vec4 world = modelMatrix * vec4(pos, 1.0);
-      vWorldPos = world.xyz;
-      vNormalW = normalize(mat3(modelMatrix) * normal);
-      vHeight = height;
-      gl_Position = projectionMatrix * viewMatrix * world;
-    }
-  `,
-  fragmentShader: `
-    uniform float uTime;
-    uniform vec3 uDeepColor;
-    uniform vec3 uShallowColor;
-    uniform vec3 uFoamColor;
-    uniform vec3 uSkyReflection;
-    uniform vec3 uSunDir;
-    uniform vec3 uSunColor;
-    uniform float uFoamAmount;
-    uniform float uDepthColorStrength;
-    uniform float uUnderwater;
-
-    varying vec3 vWorldPos;
-    varying vec3 vNormalW;
-    varying float vHeight;
-    varying vec2 vUv;
-
-    float hash21(vec2 p) {
-      p = fract(p * vec2(123.34, 345.45));
-      p += dot(p, p + 34.23);
-      return fract(p.x * p.y);
-    }
-
-    void main() {
-      vec3 normal = normalize(vNormalW);
-      vec3 viewDir = normalize(cameraPosition - vWorldPos);
-      float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.4);
-      float crest = smoothstep(0.55, 1.15, vHeight);
-      float foamNoise = hash21(vUv * 140.0 + uTime * 0.08 + vWorldPos.xz * 0.1);
-      float foam = smoothstep(0.45, 0.98, crest + foamNoise * 0.6) * uFoamAmount;
-      float depthTint = clamp((vWorldPos.y + 6.0) / 8.0, 0.0, 1.0);
-      vec3 waterColor = mix(uDeepColor, uShallowColor, depthTint * uDepthColorStrength);
-
-      vec3 halfVec = normalize(viewDir + normalize(uSunDir));
-      float spec = pow(max(dot(normal, halfVec), 0.0), 120.0) * 1.8;
-      spec += pow(max(dot(normal, halfVec), 0.0), 12.0) * 0.25;
-
-      vec3 color = mix(waterColor, uSkyReflection, fresnel * 0.9);
-      color += uSunColor * spec;
-      color = mix(color, uFoamColor, foam);
-
-      if (uUnderwater > 0.5) {
-        float murk = smoothstep(-2.0, 1.5, vWorldPos.y);
-        color = mix(vec3(0.01, 0.09, 0.16), color, 0.55);
-        color += vec3(0.0, 0.12, 0.14) * (1.0 - murk);
-      }
-
-      gl_FragColor = vec4(color, 0.98);
-    }
-  `,
-})
-
-const waterGeometry = new THREE.PlaneGeometry(180, 180, 320, 320)
-const water = new THREE.Mesh(waterGeometry, waterMaterial)
 water.rotation.x = -Math.PI / 2
-water.receiveShadow = true
 scene.add(water)
 
+const oceanFloor = new THREE.Mesh(
+  new THREE.CircleGeometry(2800, 128),
+  new THREE.MeshStandardMaterial({
+    color: 0x0e1620,
+    roughness: 1,
+    metalness: 0,
+  })
+)
+oceanFloor.rotation.x = -Math.PI / 2
+oceanFloor.position.y = -140
+oceanFloor.receiveShadow = true
+scene.add(oceanFloor)
+
+const causticDisk = new THREE.Mesh(
+  new THREE.CircleGeometry(1800, 96),
+  new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uTime: { value: 0 },
+      uColor: { value: new THREE.Color('#8de8ff') },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uColor;
+      varying vec2 vUv;
+
+      float pattern(vec2 p) {
+        float a = sin(p.x * 22.0 + uTime * 1.4);
+        float b = sin(p.y * 18.0 - uTime * 1.15);
+        float c = sin((p.x + p.y) * 26.0 + uTime * 1.8);
+        return smoothstep(1.55, 2.35, a + b + c + 1.3);
+      }
+
+      void main() {
+        vec2 uv = vUv * 2.0 - 1.0;
+        float radial = smoothstep(1.0, 0.15, length(uv));
+        float c = pattern(vUv * 2.5);
+        float alpha = c * radial * 0.16;
+        gl_FragColor = vec4(uColor, alpha);
+      }
+    `,
+  })
+)
+causticDisk.rotation.x = -Math.PI / 2
+causticDisk.position.y = -118
+scene.add(causticDisk)
+
+function makeRock(x, y, z, scale, color = 0x0c1218) {
+  const mesh = new THREE.Mesh(
+    new THREE.ConeGeometry(scale * 0.8, scale * 2.4, 5),
+    new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0 })
+  )
+  mesh.position.set(x, y, z)
+  mesh.rotation.y = Math.random() * Math.PI
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  scene.add(mesh)
+  return mesh
+}
+
+const rockGroup = new THREE.Group()
+for (const [x, y, z, s] of [
+  [0, 8, -45, 9],
+  [-120, 18, -220, 24],
+  [150, 15, -260, 20],
+  [260, 14, 120, 18],
+  [-310, 10, 80, 14],
+]) {
+  rockGroup.add(makeRock(x, y, z, s))
+}
+scene.add(rockGroup)
+
 const buoyGroup = new THREE.Group()
-const buoyBase = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.48, 0.72, 2.8, 24),
-  new THREE.MeshStandardMaterial({ color: '#ff6b4a', metalness: 0.1, roughness: 0.6 })
+const buoyBody = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.2, 1.7, 7, 24),
+  new THREE.MeshStandardMaterial({ color: 0xf06d4f, roughness: 0.62, metalness: 0.08 })
 )
-buoyBase.castShadow = true
-buoyBase.receiveShadow = true
-buoyBase.position.y = 1.4
-
+buoyBody.castShadow = true
+buoyBody.receiveShadow = true
+buoyBody.position.y = 3.5
 const buoyStripe = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.53, 0.68, 0.45, 24),
-  new THREE.MeshStandardMaterial({ color: '#fff8ef', metalness: 0.04, roughness: 0.48 })
+  new THREE.CylinderGeometry(1.28, 1.58, 1.1, 24),
+  new THREE.MeshStandardMaterial({ color: 0xf8f4ed, roughness: 0.4, metalness: 0.02 })
 )
-buoyStripe.position.y = 2.0
-
-const buoyTop = new THREE.Mesh(
-  new THREE.SphereGeometry(0.35, 24, 24),
-  new THREE.MeshStandardMaterial({ color: '#ffd35f', emissive: '#7a4700', emissiveIntensity: 0.4 })
-)
-buoyTop.position.y = 3.05
-
+buoyStripe.position.y = 5.3
 const buoyPole = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.04, 0.04, 1.2, 12),
-  new THREE.MeshStandardMaterial({ color: '#3b4658', metalness: 0.5, roughness: 0.4 })
+  new THREE.CylinderGeometry(0.12, 0.12, 4.6, 12),
+  new THREE.MeshStandardMaterial({ color: 0x404856, roughness: 0.55, metalness: 0.35 })
 )
-buoyPole.position.y = 2.6
-
-const buoyRing = new THREE.Mesh(
-  new THREE.TorusGeometry(0.62, 0.06, 12, 36),
-  new THREE.MeshStandardMaterial({ color: '#2f3846', metalness: 0.35, roughness: 0.48 })
+buoyPole.position.y = 7.7
+const buoyLamp = new THREE.Mesh(
+  new THREE.SphereGeometry(0.6, 20, 20),
+  new THREE.MeshStandardMaterial({ color: 0xffd17a, emissive: 0x8e4d08, emissiveIntensity: 1.1 })
 )
-buoyRing.rotation.x = Math.PI / 2
-buoyRing.position.y = 1.5
-
-buoyGroup.add(buoyBase, buoyStripe, buoyTop, buoyPole, buoyRing)
+buoyLamp.position.y = 10.2
+buoyGroup.add(buoyBody, buoyStripe, buoyPole, buoyLamp)
 scene.add(buoyGroup)
 
-const markerFloat = new THREE.Mesh(
-  new THREE.SphereGeometry(0.22, 16, 16),
-  new THREE.MeshStandardMaterial({ color: '#bff6ff', emissive: '#50b4d1', emissiveIntensity: 1.4 })
+const beacon = new THREE.PointLight(0xffcc7a, 30, 120, 2)
+beacon.position.set(0, 10.2, 0)
+scene.add(beacon)
+
+const farGlow = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 36),
+  new THREE.MeshBasicMaterial({ color: 0xfff1cf, transparent: true, opacity: 0.22 })
 )
-markerFloat.castShadow = true
-scene.add(markerFloat)
+farGlow.position.set(0, 18, -170)
+scene.add(farGlow)
+
+const starField = new THREE.BufferGeometry()
+const starCount = 1000
+const starPositions = new Float32Array(starCount * 3)
+for (let i = 0; i < starCount; i++) {
+  const radius = 2500 + Math.random() * 1500
+  const theta = Math.random() * Math.PI * 2
+  const phi = Math.random() * Math.PI * 0.45
+  starPositions[i * 3] = Math.cos(theta) * Math.sin(phi) * radius
+  starPositions[i * 3 + 1] = Math.cos(phi) * radius * 0.8 + 800
+  starPositions[i * 3 + 2] = Math.sin(theta) * Math.sin(phi) * radius
+}
+starField.setAttribute('position', new THREE.BufferAttribute(starPositions, 3))
+const stars = new THREE.Points(
+  starField,
+  new THREE.PointsMaterial({ color: 0xd9ebff, size: 6, sizeAttenuation: true, transparent: true, opacity: 0.9 })
+)
+scene.add(stars)
 
 const presets = {
   Tropical: {
-    skyTop: '#70c4ff',
-    horizon: '#e5f7ff',
-    fog: '#89d9ff',
-    deep: '#0f5f88',
-    shallow: '#3ff2d6',
-    foam: '#f0ffff',
-    caustic: '#91fff1',
-    sun: '#ffe09e',
-    sunPos: [22, 26, 10],
-    exposure: 1.12,
-    waveAmp: 1.05,
-    speed: 0.52,
-    choppiness: 0.55,
-    foamAmount: 0.5,
+    elevation: 5,
+    azimuth: 182,
+    exposure: 0.95,
+    waterColor: 0x1b6f8f,
+    distortionScale: 2.2,
+    size: 0.8,
+    fog: 0.00035,
+    beacon: 0xe7fff8,
+    skyTop: 10,
+    ambient: 0.42,
   },
   Storm: {
-    skyTop: '#2d4268',
-    horizon: '#92a8c5',
-    fog: '#61748e',
-    deep: '#10233d',
-    shallow: '#1b4f72',
-    foam: '#eef8ff',
-    caustic: '#6fd7ff',
-    sun: '#d3e8ff',
-    sunPos: [-18, 16, -8],
-    exposure: 0.82,
-    waveAmp: 1.95,
-    speed: 0.82,
-    choppiness: 1.05,
-    foamAmount: 0.92,
+    elevation: 2,
+    azimuth: 178,
+    exposure: 0.55,
+    waterColor: 0x0a1726,
+    distortionScale: 5.4,
+    size: 1.55,
+    fog: 0.00075,
+    beacon: 0xcde8ff,
+    skyTop: 4,
+    ambient: 0.18,
   },
   Sunset: {
-    skyTop: '#533c87',
-    horizon: '#ffb17d',
-    fog: '#b56f78',
-    deep: '#1d2358',
-    shallow: '#824e8f',
-    foam: '#fff1de',
-    caustic: '#ffcb97',
-    sun: '#ffc27e',
-    sunPos: [25, 8, 2],
-    exposure: 1.0,
-    waveAmp: 1.28,
-    speed: 0.5,
-    choppiness: 0.68,
-    foamAmount: 0.62,
+    elevation: 1.5,
+    azimuth: 200,
+    exposure: 0.88,
+    waterColor: 0x3a295a,
+    distortionScale: 3.4,
+    size: 1.05,
+    fog: 0.00045,
+    beacon: 0xffd39a,
+    skyTop: 3,
+    ambient: 0.26,
   },
   Moonlight: {
-    skyTop: '#102041',
-    horizon: '#5f80ba',
-    fog: '#34507f',
-    deep: '#081224',
-    shallow: '#11417e',
-    foam: '#e9f6ff',
-    caustic: '#7dd4ff',
-    sun: '#d9ecff',
-    sunPos: [12, 22, -24],
-    exposure: 0.78,
-    waveAmp: 1.18,
-    speed: 0.45,
-    choppiness: 0.62,
-    foamAmount: 0.56,
+    elevation: 6,
+    azimuth: 214,
+    exposure: 0.62,
+    waterColor: 0x081a2f,
+    distortionScale: 4.1,
+    size: 1.12,
+    fog: 0.00042,
+    beacon: 0xffcc7a,
+    skyTop: 8,
+    ambient: 0.22,
   },
 }
 
 const params = {
-  preset: 'Tropical',
+  preset: 'Moonlight',
   underwater: false,
   followBuoy: false,
-  waveAmp: 1.05,
-  waveSpeed: 0.52,
-  choppiness: 0.55,
-  foamAmount: 0.5,
+  distortionScale: presets.Moonlight.distortionScale,
+  size: presets.Moonlight.size,
+  elevation: presets.Moonlight.elevation,
+  azimuth: presets.Moonlight.azimuth,
+  exposure: presets.Moonlight.exposure,
 }
 
-function setColor(target, value) {
-  target.set(value)
+function updateSun() {
+  const phi = THREE.MathUtils.degToRad(90 - params.elevation)
+  const theta = THREE.MathUtils.degToRad(params.azimuth)
+  sun.setFromSphericalCoords(1, phi, theta)
+
+  sky.material.uniforms.sunPosition.value.copy(sun)
+  water.material.uniforms.sunDirection.value.copy(sun).normalize()
+  moonLight.position.copy(sun).multiplyScalar(260)
+  moonLight.target.position.set(0, 0, 0)
+
+  if (skyEnvTarget) skyEnvTarget.dispose()
+  skyEnvTarget = pmrem.fromScene(sky)
+  scene.environment = skyEnvTarget.texture
 }
 
 function applyPreset(name) {
-  const preset = presets[name]
-  if (!preset) return
-
+  const p = presets[name]
+  if (!p) return
   params.preset = name
-  params.waveAmp = preset.waveAmp
-  params.waveSpeed = preset.speed
-  params.choppiness = preset.choppiness
-  params.foamAmount = preset.foamAmount
+  params.elevation = p.elevation
+  params.azimuth = p.azimuth
+  params.exposure = p.exposure
+  params.distortionScale = p.distortionScale
+  params.size = p.size
 
-  setColor(skyMaterial.uniforms.topColor.value, preset.skyTop)
-  setColor(skyMaterial.uniforms.horizonColor.value, preset.horizon)
-  setColor(skyMaterial.uniforms.bottomColor.value, '#03101c')
+  renderer.toneMappingExposure = p.exposure
+  water.material.uniforms.waterColor.value.setHex(p.waterColor)
+  water.material.uniforms.distortionScale.value = p.distortionScale
+  water.material.uniforms.size.value = p.size
+  scene.fog.density = p.fog
+  beacon.color.setHex(p.beacon)
+  beacon.intensity = name === 'Storm' ? 20 : 30
+  ambient.intensity = p.ambient
+  stars.material.opacity = name === 'Tropical' ? 0.18 : 0.9
+  farGlow.material.opacity = name === 'Storm' ? 0.08 : 0.22
 
-  setColor(waterUniforms.uDeepColor.value, preset.deep)
-  setColor(waterUniforms.uShallowColor.value, preset.shallow)
-  setColor(waterUniforms.uFoamColor.value, preset.foam)
-  setColor(waterUniforms.uSkyReflection.value, preset.horizon)
-  setColor(waterUniforms.uSunColor.value, preset.sun)
-  setColor(floorMaterial.uniforms.uColorA.value, preset.deep)
-  setColor(floorMaterial.uniforms.uColorB.value, '#0a1320')
-  setColor(floorMaterial.uniforms.uCausticColor.value, preset.caustic)
+  const turbidity = name === 'Storm' ? 11 : name === 'Sunset' ? 12 : 8
+  const rayleigh = name === 'Tropical' ? 1.6 : name === 'Sunset' ? 0.75 : 0.45
+  const mieCoefficient = name === 'Storm' ? 0.012 : 0.005
+  const mieDirectionalG = name === 'Storm' ? 0.92 : 0.8
 
-  scene.fog.color.set(preset.fog)
-  renderer.toneMappingExposure = preset.exposure
-  waterUniforms.uWaveAmp.value = preset.waveAmp
-  waterUniforms.uWaveSpeed.value = preset.speed
-  waterUniforms.uChoppiness.value = preset.choppiness
-  waterUniforms.uFoamAmount.value = preset.foamAmount
+  sky.material.uniforms.turbidity.value = turbidity
+  sky.material.uniforms.rayleigh.value = rayleigh
+  sky.material.uniforms.mieCoefficient.value = mieCoefficient
+  sky.material.uniforms.mieDirectionalG.value = mieDirectionalG
 
-  sunLight.position.set(...preset.sunPos)
-  sunLight.target.position.set(0, 0, 0)
-  sunLight.color.set(preset.sun)
-  ambientLight.color.set(preset.horizon)
-  ambientLight.groundColor.set('#08101d')
-  ambientLight.intensity = name === 'Storm' ? 0.45 : 0.8
-
-  sunSphere.position.copy(sunLight.position)
-  sunSphere.material.color.set(preset.sun)
-  waterUniforms.uSunDir.value.copy(sunLight.position).normalize()
-
-  syncGui()
+  updateSun()
+  controllers.forEach((c) => c.updateDisplay())
 }
 
-function syncGui() {
-  controllers.forEach((controller) => controller.updateDisplay())
-}
-
-function setUnderwaterMode(enabled) {
+function setUnderwater(enabled) {
   params.underwater = enabled
-  waterUniforms.uUnderwater.value = enabled ? 1 : 0
-  camera.position.y = enabled ? -1.5 : Math.max(camera.position.y, 4.5)
-  controls.maxPolarAngle = enabled ? Math.PI * 0.96 : Math.PI * 0.49
-  scene.fog.density = enabled ? 0.016 : 0.0025
-  syncGui()
+  scene.fog.color.set(enabled ? 0x08334a : 0x111826)
+  scene.fog.density = enabled ? 0.0038 : presets[params.preset].fog
+  camera.position.y = enabled ? -14 : Math.max(camera.position.y, 18)
+  controls.maxPolarAngle = enabled ? Math.PI * 0.97 : Math.PI * 0.495
+  farGlow.visible = !enabled
+  stars.visible = !enabled
+  controllers.forEach((c) => c.updateDisplay())
 }
 
-function waveHeightAt(x, z, time = clock.getElapsedTime()) {
-  const scale = waterUniforms.uWaveScale.value
-  const speed = waterUniforms.uWaveSpeed.value
-  const amp = waterUniforms.uWaveAmp.value
-  const t = time * speed
-  const pX = x * scale
-  const pZ = z * scale
-
-  let h = 0
-  h += Math.sin((pX * Math.cos(0.2) + pZ * Math.sin(0.2)) * 1.2 + t * 1.8) * 0.55
-  h += Math.sin((pX * Math.cos(1.1) + pZ * Math.sin(1.1)) * 1.9 - t * 1.4) * 0.35
-  h += Math.sin((pX * Math.cos(2.4) + pZ * Math.sin(2.4)) * 2.8 + t * 1.2) * 0.2
-  h += Math.sin((pX * Math.cos(0.8) + pZ * Math.sin(0.8)) * 5.2 + t * 2.6) * 0.08
-  return h * amp
+function waveHeightAt(x, z, time) {
+  return (
+    Math.sin(x * 0.032 + time * 0.9) * 0.9 +
+    Math.sin(z * 0.041 - time * 1.15) * 0.75 +
+    Math.sin((x + z) * 0.02 + time * 0.6) * 1.15
+  )
 }
 
-const gui = new GUI({ title: 'Water Lab controls' })
+const gui = new GUI({ title: 'Water' })
 const controllers = [
-  gui.add(params, 'preset', Object.keys(presets)).name('Preset').onChange(applyPreset),
-  gui.add(params, 'waveAmp', 0.5, 2.5, 0.01).name('Wave height').onChange((value) => {
-    waterUniforms.uWaveAmp.value = value
-  }),
-  gui.add(params, 'waveSpeed', 0.2, 1.2, 0.01).name('Wave speed').onChange((value) => {
-    waterUniforms.uWaveSpeed.value = value
-  }),
-  gui.add(params, 'choppiness', 0.1, 1.4, 0.01).name('Choppiness').onChange((value) => {
-    waterUniforms.uChoppiness.value = value
-  }),
-  gui.add(params, 'foamAmount', 0.1, 1.2, 0.01).name('Foam').onChange((value) => {
-    waterUniforms.uFoamAmount.value = value
-  }),
-  gui.add(params, 'underwater').name('Underwater').onChange(setUnderwaterMode),
-  gui.add(params, 'followBuoy').name('Center buoy'),
+  gui.add(params, 'preset', Object.keys(presets)).name('preset').onChange(applyPreset),
+  gui.add(params, 'elevation', 0, 25, 0.1).name('elevation').onChange(updateSun),
+  gui.add(params, 'azimuth', 0, 360, 0.1).name('azimuth').onChange(updateSun),
+  gui.add(params, 'exposure', 0.35, 1.2, 0.01).name('exposure').onChange((v) => (renderer.toneMappingExposure = v)),
+  gui.add(params, 'distortionScale', 0.5, 8, 0.1).name('distortion').onChange((v) => (water.material.uniforms.distortionScale.value = v)),
+  gui.add(params, 'size', 0.1, 2.5, 0.01).name('size').onChange((v) => (water.material.uniforms.size.value = v)),
+  gui.add(params, 'underwater').name('underwater').onChange(setUnderwater),
+  gui.add(params, 'followBuoy').name('follow buoy'),
 ]
 
 document.querySelectorAll('[data-preset]').forEach((button) => {
   button.addEventListener('click', () => applyPreset(button.dataset.preset))
 })
 
-document.querySelector('#underwater-toggle').addEventListener('click', () => {
-  setUnderwaterMode(!params.underwater)
-})
-
+document.querySelector('#underwater-toggle').addEventListener('click', () => setUnderwater(!params.underwater))
 document.querySelector('#camera-toggle').addEventListener('click', () => {
   params.followBuoy = !params.followBuoy
-  syncGui()
+  controllers.forEach((c) => c.updateDisplay())
+})
+window.addEventListener('keydown', (event) => {
+  if (event.key.toLowerCase() === 'u') setUnderwater(!params.underwater)
 })
 
-window.addEventListener('keydown', (event) => {
-  if (event.key.toLowerCase() === 'u') setUnderwaterMode(!params.underwater)
-})
+applyPreset('Moonlight')
 
 const clock = new THREE.Clock()
-applyPreset('Tropical')
 
 function animate() {
   requestAnimationFrame(animate)
   const elapsed = clock.getElapsedTime()
-  waterUniforms.uTime.value = elapsed
-  floorMaterial.uniforms.uTime.value = elapsed
+  water.material.uniforms.time.value = elapsed / 2.2
+  causticDisk.material.uniforms.uTime.value = elapsed
 
   const buoyX = 0
   const buoyZ = 0
   const buoyY = waveHeightAt(buoyX, buoyZ, elapsed)
-  const sampleX = waveHeightAt(buoyX + 0.8, buoyZ, elapsed) - waveHeightAt(buoyX - 0.8, buoyZ, elapsed)
-  const sampleZ = waveHeightAt(buoyX, buoyZ + 0.8, elapsed) - waveHeightAt(buoyX, buoyZ - 0.8, elapsed)
+  const dx = waveHeightAt(buoyX + 2, buoyZ, elapsed) - waveHeightAt(buoyX - 2, buoyZ, elapsed)
+  const dz = waveHeightAt(buoyX, buoyZ + 2, elapsed) - waveHeightAt(buoyX, buoyZ - 2, elapsed)
+  buoyGroup.position.set(buoyX, buoyY - 2.4, buoyZ)
+  buoyGroup.rotation.z = dx * 0.05
+  buoyGroup.rotation.x = -dz * 0.05
+  buoyGroup.rotation.y = Math.sin(elapsed * 0.2) * 0.08
+  beacon.position.copy(buoyGroup.position).add(new THREE.Vector3(0, 10.2, 0))
 
-  buoyGroup.position.set(buoyX, buoyY - 0.65, buoyZ)
-  buoyGroup.rotation.z = sampleX * 0.14
-  buoyGroup.rotation.x = -sampleZ * 0.14
-  buoyGroup.rotation.y = Math.sin(elapsed * 0.35) * 0.06
-
-  markerFloat.position.set(5.5, waveHeightAt(5.5, -3.5, elapsed) + 0.3, -3.5)
+  farGlow.lookAt(camera.position)
 
   if (params.followBuoy) {
-    controls.target.lerp(new THREE.Vector3(0, buoyGroup.position.y + 1.4, 0), 0.08)
+    controls.target.lerp(new THREE.Vector3(0, buoyGroup.position.y + 4, 0), 0.08)
   } else {
-    controls.target.lerp(new THREE.Vector3(0, params.underwater ? -0.3 : 1.8, 0), 0.05)
+    controls.target.lerp(new THREE.Vector3(0, params.underwater ? -8 : 3.5, -20), 0.04)
   }
 
   controls.update()
